@@ -2236,7 +2236,7 @@ public partial class MainWindow : Window
     {
         _loadingSettings = true;
         MemorySlider.Value = Math.Clamp(_preferences.MemoryMb, (int)MemorySlider.Minimum, (int)MemorySlider.Maximum);
-        _preferences.MemoryMb = (int)Math.Round(MemorySlider.Value / 512.0) * 512;
+        _preferences.MemoryMb = (int)Math.Round(MemorySlider.Value / 512.0, MidpointRounding.AwayFromZero) * 512;
         if (_preferences.MinimumMemoryMb > _preferences.MemoryMb) _preferences.MinimumMemoryMb = 1024;
         MemoryValueLabel.Text = FormatMemory(_preferences.MemoryMb);
         JavaPathBox.Text = _preferences.JavaPath;
@@ -2328,7 +2328,7 @@ public partial class MainWindow : Window
     private void MemorySlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_loadingSettings || MemoryValueLabel is null) return;
-        var ram = Math.Clamp((int)Math.Round(MemorySlider.Value / 512.0) * 512, 2048, 16384);
+        var ram = Math.Clamp((int)Math.Round(MemorySlider.Value / 512.0, MidpointRounding.AwayFromZero) * 512, 2048, 16384);
         _preferences.MemoryMb = ram;
         _preferences.MinimumMemoryMb = Math.Min(_preferences.MinimumMemoryMb, ram);
         MemoryValueLabel.Text = FormatMemory(ram);
@@ -2677,3 +2677,4 @@ public sealed record ModInstallTarget(string Label, string Version)
 {
     public override string ToString() => Label;
 }
+
