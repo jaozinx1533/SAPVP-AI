@@ -1,0 +1,21 @@
+# .NET build output
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Generated apps and installers
+publish/
+publish-*/
+release/
+SAPVP-AI.exe
+*.msi
+
+# Local logs and launcher data
+launcher-crash.log
+*.local.json
+.env
+.env.*
+!.env.example
+
