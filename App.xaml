@@ -91,10 +91,11 @@
           <ControlTemplate TargetType="TabControl">
             <Grid KeyboardNavigation.TabNavigation="Local" SnapsToDevicePixels="True">
               <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-              <DockPanel Grid.Row="0" LastChildFill="True" Margin="0,0,0,10" KeyboardNavigation.TabIndex="1">
-                <TabPanel x:Name="HeaderPanel" IsItemsHost="True" DockPanel.Dock="Left" KeyboardNavigation.TabIndex="1"/>
-                <Border Height="1" Background="{DynamicResource BorderBrush}" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
-              </DockPanel>
+              <Grid Grid.Row="0" Margin="0,0,0,10" KeyboardNavigation.TabIndex="1">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TabPanel x:Name="HeaderPanel" Grid.Column="0" IsItemsHost="True" HorizontalAlignment="Left" KeyboardNavigation.TabIndex="1"/>
+                <Border Grid.Column="1" Height="1" Background="{DynamicResource BorderBrush}" VerticalAlignment="Bottom" Margin="0,0,0,0"/>
+              </Grid>
               <ContentPresenter x:Name="PART_SelectedContentHost" Grid.Row="1" ContentSource="SelectedContent" SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
             </Grid>
           </ControlTemplate>
@@ -105,7 +106,7 @@
     <Style TargetType="TabItem">
       <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
       <Setter Property="Padding" Value="15,10" />
-      <Setter Property="Margin" Value="0,0,5,0" />
+      <Setter Property="Margin" Value="0" />
       <Setter Property="FocusVisualStyle" Value="{x:Null}" />
       <Setter Property="Template">
         <Setter.Value>
@@ -113,7 +114,7 @@
             <Grid>
               <Border x:Name="TabSurface" Background="Transparent" CornerRadius="8"/>
               <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True" Margin="{TemplateBinding Padding}"/>
-              <Border x:Name="SelectionIndicator" Height="2" Background="Transparent" CornerRadius="1" VerticalAlignment="Bottom" Margin="12,0,12,0"/>
+              <Border x:Name="SelectionIndicator" Height="2" Background="Transparent" CornerRadius="1" VerticalAlignment="Bottom" Margin="12,0,0,0"/>
             </Grid>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="TabSurface" Property="Background" Value="{DynamicResource HoverBrush}"/><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/></Trigger>
@@ -222,8 +223,23 @@
     <Style TargetType="ListBoxItem">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-      <Setter Property="Padding" Value="4" />
+      <Setter Property="Padding" Value="0" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="ItemSurface" Background="{TemplateBinding Background}" BorderBrush="Transparent" BorderThickness="1" CornerRadius="12">
+              <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ItemSurface" Property="BorderBrush" Value="{DynamicResource BorderBrush}"/></Trigger>
+              <Trigger Property="IsSelected" Value="True"><Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource SelectedBrush}"/><Setter TargetName="ItemSurface" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/></Trigger>
+              <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="ItemSurface" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
       <Style.Triggers>
         <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource HoverBrush}" /></Trigger>
         <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{DynamicResource SelectedBrush}" /></Trigger>

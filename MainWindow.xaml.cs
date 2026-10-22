@@ -19,6 +19,7 @@ using System.Windows.Media;
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 
 namespace MinecraftProjectLauncher;
 
@@ -54,6 +55,7 @@ public partial class MainWindow : Window
     private ModrinthProjectDetails? _loadedModDetails;
     private ManagedMod? _managedModToUpdate;
     private bool _openingManagedModUpdate;
+    private bool _returnToInstancesAfterModDetails;
     private readonly Dictionary<string, string?> _modIconCache = new(StringComparer.OrdinalIgnoreCase);
     private bool IsCustomInstance(string path) => path.Contains(Path.Combine("instances", "custom") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 
@@ -420,6 +422,7 @@ public partial class MainWindow : Window
 
     private void HomeNav_Click(object sender, RoutedEventArgs e)
     {
+        _returnToInstancesAfterModDetails = false;
         ShowPage(HomePage, HomeNavButton);
         RefreshHomeDashboard();
     }
@@ -582,6 +585,7 @@ public partial class MainWindow : Window
 
     private void InstancesNav_Click(object sender, RoutedEventArgs e)
     {
+        _returnToInstancesAfterModDetails = false;
         ShowPage(ModrinthPage, InstancesNavButton);
         LibraryTitle.Text = "Instâncias";
         LibrarySubtitle.Text = "Gerencie suas versões instaladas, mods e arquivos separados.";
@@ -594,6 +598,7 @@ public partial class MainWindow : Window
 
     private async void ModsNav_Click(object sender, RoutedEventArgs e)
     {
+        _returnToInstancesAfterModDetails = false;
         ShowPage(ModrinthPage, ModsNavButton);
         LibraryTitle.Text = "Biblioteca";
         LibrarySubtitle.Text = "Explore mods e resource packs do Modrinth e organize suas versões.";
@@ -922,8 +927,57 @@ public partial class MainWindow : Window
         _managedModToUpdate = null;
         DetailInstallButton.Content = "Instalar versão selecionada";
         ModDetailsView.Visibility = Visibility.Collapsed;
-        LibraryTabs.Visibility = Visibility.Visible;
+        if (_returnToInstancesAfterModDetails)
+        {
+            _returnToInstancesAfterModDetails = false;
+            LibraryTabs.Visibility = Visibility.Collapsed;
+            LibraryInstancesView.Visibility = Visibility.Visible;
+            ShowPage(ModrinthPage, InstancesNavButton);
+            LibraryTitle.Text = "Instâncias";
+            var instance = GameInstanceManager.GetInstances().FirstOrDefault(item =>
+                string.Equals(item.Directory, _selectedManagedInstancePath, StringComparison.OrdinalIgnoreCase));
+            LibrarySubtitle.Text = instance is null
+                ? "Gerencie suas versões instaladas, mods e arquivos separados."
+                : $"Gerencie {instance.Name} · Minecraft {instance.Version} e seus arquivos separados.";
+            RefreshInstanceList();
+            RefreshModrinthInstance();
+        }
+        else
+        {
+            LibraryTabs.Visibility = Visibility.Visible;
+            LibraryInstancesView.Visibility = Visibility.Collapsed;
+        }
         _ = RefreshDiscordPresenceAsync();
+    }
+
+    private void ModResultCard_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement card || ClickOriginatesInButton(e.OriginalSource as DependencyObject, card)) return;
+        if (card.DataContext is ModrinthMod mod)
+            OpenModDetails_Click(new Button { Tag = mod }, new RoutedEventArgs());
+    }
+
+    private void ManagedModCard_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement card || ClickOriginatesInButton(e.OriginalSource as DependencyObject, card)) return;
+        if (card.DataContext is not ManagedMod mod) return;
+        if (!mod.IsManaged)
+        {
+            LibraryStatusText.Text = "Este arquivo não tem vínculo com um projeto Modrinth, então não há página de versões para abrir.";
+            return;
+        }
+        _returnToInstancesAfterModDetails = true;
+        UpdateSingleManagedMod_Click(new Button { Tag = mod }, new RoutedEventArgs());
+    }
+
+    private static bool ClickOriginatesInButton(DependencyObject? source, DependencyObject boundary)
+    {
+        while (source is not null && !ReferenceEquals(source, boundary))
+        {
+            if (source is ButtonBase) return true;
+            source = VisualTreeHelper.GetParent(source);
+        }
+        return false;
     }
 
     private async void DetailGameVersion_Changed(object sender, SelectionChangedEventArgs e)
@@ -1155,6 +1209,7 @@ public partial class MainWindow : Window
     {
         if ((sender as FrameworkElement)?.Tag is not ManagedMod mod || !mod.IsManaged || VersionSelector.SelectedItem is not string gameVersion) return;
         _managedModToUpdate = mod;
+        _returnToInstancesAfterModDetails = true;
         _openingManagedModUpdate = true;
         ShowPage(ModrinthPage, ModsNavButton);
         LibraryTitle.Text = "Biblioteca";
