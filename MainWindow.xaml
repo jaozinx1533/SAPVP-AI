@@ -100,7 +100,6 @@
         <Button x:Name="MaximizeRestoreButton" Style="{StaticResource CaptionButtonStyle}" Click="ToggleMaximizeWindow_Click" ToolTip="Maximizar"><TextBlock x:Name="MaximizeRestoreGlyph" Text="&#xE922;" FontFamily="Segoe MDL2 Assets" FontSize="10"/></Button>
         <Button Style="{StaticResource CloseCaptionButtonStyle}" Click="CloseWindow_Click" ToolTip="Fechar"><TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10"/></Button>
       </StackPanel>
-      <Border Height="1" Background="{DynamicResource BorderBrush}" VerticalAlignment="Bottom"/>
     </Grid>
     <Border Grid.Row="1" Grid.Column="0" Background="{DynamicResource SidebarBrush}" Padding="24">
       <DockPanel LastChildFill="True">
