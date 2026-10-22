@@ -2203,15 +2203,42 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(new Action(() => _ = RefreshDiscordPresenceAsync()), DispatcherPriority.Background);
     }
 
+    private void SettingsCategory_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag?.ToString() is not string category) return;
+        SetSettingsCategory(category);
+    }
+
+    private void SetSettingsCategory(string category)
+    {
+        var groups = new Dictionary<string, (string Title, string Description, FrameworkElement[] Cards)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["appearance"] = ("Aparência", "Escolha um tema e veja uma prévia antes de aplicar.", [AppearanceSettingsCard]),
+            ["java"] = ("Java", "Escolha como o launcher encontra o Java usado pelo Minecraft.", [JavaSettingsCard]),
+            ["performance"] = ("Desempenho", "Ajuste a memória e as opções de inicialização do jogo.", [PerformanceSettingsCard]),
+            ["account"] = ("Conta e aparência", "Gerencie a conta Microsoft, sua skin e sua capa.", [AccountSettingsCard, SkinSettingsCard]),
+            ["more"] = ("Discord e atualizações", "Controle a atividade do Discord e confira atualizações e avisos do projeto.", [PresenceSettingsCard, NewsSettingsCard, UpdatesSettingsCard])
+        };
+        if (!groups.TryGetValue(category, out var selected)) return;
+        SettingsCategoryTitle.Text = selected.Title;
+        SettingsCategoryDescription.Text = selected.Description;
+        var allCards = groups.Values.SelectMany(group => group.Cards).Distinct().ToArray();
+        foreach (var card in allCards) card.Visibility = selected.Cards.Contains(card) ? Visibility.Visible : Visibility.Collapsed;
+        var tabs = new[] { SettingsAppearanceTab, SettingsJavaTab, SettingsPerformanceTab, SettingsAccountTab, SettingsMoreTab };
+        foreach (var tab in tabs)
+        {
+            var isActive = string.Equals(tab.Tag?.ToString(), category, StringComparison.OrdinalIgnoreCase);
+            tab.Background = isActive ? (Brush)FindResource("SidebarActiveBrush") : Brushes.Transparent;
+        }
+    }
+
     private void InitializeExtras()
     {
         _loadingSettings = true;
-        ThemeBox.SelectedIndex = _preferences.LightTheme ? 1 : 0;
-        foreach (ComboBoxItem item in MemoryBox.Items) if (int.TryParse(item.Tag?.ToString(), out var ram) && ram == _preferences.MemoryMb) MemoryBox.SelectedItem = item;
-        if (MemoryBox.SelectedItem is null) MemoryBox.SelectedIndex = 1;
-        foreach (ComboBoxItem item in MinimumMemoryBox.Items) if (int.TryParse(item.Tag?.ToString(), out var ram) && ram == _preferences.MinimumMemoryMb) MinimumMemoryBox.SelectedItem = item;
-        if (MinimumMemoryBox.SelectedItem is null) MinimumMemoryBox.SelectedIndex = 1;
-        if (_preferences.MinimumMemoryMb > _preferences.MemoryMb) _preferences.MinimumMemoryMb = Math.Min(1024, _preferences.MemoryMb);
+        MemorySlider.Value = Math.Clamp(_preferences.MemoryMb, (int)MemorySlider.Minimum, (int)MemorySlider.Maximum);
+        _preferences.MemoryMb = (int)Math.Round(MemorySlider.Value / 512.0) * 512;
+        if (_preferences.MinimumMemoryMb > _preferences.MemoryMb) _preferences.MinimumMemoryMb = 1024;
+        MemoryValueLabel.Text = FormatMemory(_preferences.MemoryMb);
         JavaPathBox.Text = _preferences.JavaPath;
         JavaPathStatus.Text = string.IsNullOrWhiteSpace(_preferences.JavaPath) ? "Java automático" : $"Java manual: {_preferences.JavaPath}";
         ExtraJvmArgumentsBox.Text = _preferences.ExtraJvmArguments;
@@ -2234,6 +2261,8 @@ public partial class MainWindow : Window
         RefreshMicrosoftAccounts();
         _loadingSettings = false;
         ApplyTheme(_preferences.LightTheme);
+        UpdateThemeOptionStyles();
+        SetSettingsCategory("appearance");
         _newsTimer.Start();
         _discordPresenceTimer.Start();
         _ = RefreshDiscordPresenceAsync();
@@ -2274,46 +2303,35 @@ public partial class MainWindow : Window
         resources[key] = new SolidColorBrush(color);
     }
 
-    private void Theme_Changed(object sender, SelectionChangedEventArgs e)
+    private void ThemeOption_Click(object sender, RoutedEventArgs e)
     {
-        if (_loadingSettings || ThemeBox.SelectedIndex < 0) return;
-        _preferences.LightTheme = ThemeBox.SelectedIndex == 1; ApplyTheme(_preferences.LightTheme); LauncherExtrasStore.SavePreferences(_preferences);
-    }
-
-    private void Memory_Changed(object sender, SelectionChangedEventArgs e)
-    {
-        if (_loadingSettings || MemoryBox.SelectedItem is not ComboBoxItem item || !int.TryParse(item.Tag?.ToString(), out var ram)) return;
-        _preferences.MemoryMb = ram;
-        if (_preferences.MinimumMemoryMb > ram)
-        {
-            var adjustedMinimum = MinimumMemoryBox.Items.OfType<ComboBoxItem>().LastOrDefault(option => int.TryParse(option.Tag?.ToString(), out var value) && value <= ram);
-            if (adjustedMinimum is not null)
-            {
-                _loadingSettings = true;
-                MinimumMemoryBox.SelectedItem = adjustedMinimum;
-                _preferences.MinimumMemoryMb = int.Parse(adjustedMinimum.Tag!.ToString()!);
-                _loadingSettings = false;
-            }
-        }
+        if (_loadingSettings || (sender as FrameworkElement)?.Tag?.ToString() is not string selected) return;
+        _preferences.LightTheme = selected.Equals("light", StringComparison.OrdinalIgnoreCase);
+        ApplyTheme(_preferences.LightTheme);
         LauncherExtrasStore.SavePreferences(_preferences);
+        UpdateThemeOptionStyles();
+        ThemePreviewStatus.Text = $"Tema {(_preferences.LightTheme ? "claro" : "escuro")} aplicado.";
     }
 
-    private void MinimumMemory_Changed(object sender, SelectionChangedEventArgs e)
+    private void UpdateThemeOptionStyles()
     {
-        if (_loadingSettings || MinimumMemoryBox.SelectedItem is not ComboBoxItem item || !int.TryParse(item.Tag?.ToString(), out var ram)) return;
-        var max = _preferences.MemoryMb;
-        if (ram > max)
-        {
-            var adjusted = MinimumMemoryBox.Items.OfType<ComboBoxItem>().LastOrDefault(option => int.TryParse(option.Tag?.ToString(), out var value) && value <= max);
-            if (adjusted is not null)
-            {
-                _loadingSettings = true;
-                MinimumMemoryBox.SelectedItem = adjusted;
-                _loadingSettings = false;
-                ram = int.Parse(adjusted.Tag!.ToString()!);
-            }
-        }
-        _preferences.MinimumMemoryMb = ram;
+        var selected = _preferences.LightTheme ? LightThemeOption : DarkThemeOption;
+        var idle = _preferences.LightTheme ? DarkThemeOption : LightThemeOption;
+        selected.BorderBrush = (Brush)FindResource("AccentBrush");
+        selected.BorderThickness = new Thickness(2);
+        idle.BorderBrush = (Brush)FindResource("BorderBrush");
+        idle.BorderThickness = new Thickness(1);
+    }
+
+    private static string FormatMemory(int memoryMb) => memoryMb >= 1024 ? $"{memoryMb / 1024.0:0.#} GB" : $"{memoryMb} MB";
+
+    private void MemorySlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_loadingSettings || MemoryValueLabel is null) return;
+        var ram = Math.Clamp((int)Math.Round(MemorySlider.Value / 512.0) * 512, 2048, 16384);
+        _preferences.MemoryMb = ram;
+        _preferences.MinimumMemoryMb = Math.Min(_preferences.MinimumMemoryMb, ram);
+        MemoryValueLabel.Text = FormatMemory(ram);
         LauncherExtrasStore.SavePreferences(_preferences);
     }
 
@@ -2321,13 +2339,8 @@ public partial class MainWindow : Window
     {
         var totalMb = (int)(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024));
         var targetMb = Math.Clamp(totalMb / 2, 2048, 8192);
-        var option = MemoryBox.Items.OfType<ComboBoxItem>()
-            .Where(item => int.TryParse(item.Tag?.ToString(), out var value) && value <= targetMb)
-            .LastOrDefault() ?? MemoryBox.Items.OfType<ComboBoxItem>().First();
-        MemoryBox.SelectedItem = option;
+        MemorySlider.Value = targetMb;
         _preferences.MinimumMemoryMb = 1024;
-        var minimum = MinimumMemoryBox.Items.OfType<ComboBoxItem>().FirstOrDefault(item => item.Tag?.ToString() == "1024");
-        if (minimum is not null) MinimumMemoryBox.SelectedItem = minimum;
         LauncherExtrasStore.SavePreferences(_preferences);
         MessageBox.Show($"Sugestão aplicada: {_preferences.MemoryMb / 1024.0:0.#} GB para o jogo, reservando memória para o Windows e outros aplicativos.", "Memória sugerida", MessageBoxButton.OK, MessageBoxImage.Information);
     }
