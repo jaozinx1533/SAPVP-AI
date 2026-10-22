@@ -13,6 +13,7 @@ using MinecraftProjectLauncher.Services;
 using System.Net.Http;
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows.Threading;
 using System.Windows.Media;
 using System.Runtime.InteropServices;
@@ -132,6 +133,7 @@ public partial class MainWindow : Window
                 HomeRecentInstanceSelector.SelectedIndex = 0;
             RefreshModrinthInstance();
             RefreshHomeDashboard();
+            UpdateJavaPathStatus();
         };
         Loaded += async (_, _) => await SearchModsAsync(showErrors: false);
         _discordPresenceTimer.Tick += async (_, _) => await RefreshDiscordPresenceAsync();
@@ -2196,7 +2198,13 @@ public partial class MainWindow : Window
     private void ShowPage(FrameworkElement page, Button active)
     {
         foreach (var p in new FrameworkElement[] { HomePage, ModrinthPage, ReportsPage, StatusPage, NewsPage, SettingsPage }) p.Visibility = ReferenceEquals(p, page) ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var b in new[] { HomeNavButton, InstancesNavButton, ModsNavButton, ReportsNavButton, StatusNavButton, NewsNavButton, SettingsNavButton }) b.Background = ReferenceEquals(b, active) ? (Brush)FindResource("SidebarActiveBrush") : Brushes.Transparent;
+        foreach (var b in new[] { HomeNavButton, InstancesNavButton, ModsNavButton, ReportsNavButton, StatusNavButton, NewsNavButton, SettingsNavButton })
+        {
+            var selected = ReferenceEquals(b, active);
+            b.Background = selected ? (Brush)FindResource("SidebarActiveBrush") : Brushes.Transparent;
+            b.BorderBrush = selected ? (Brush)FindResource("AccentBrush") : Brushes.Transparent;
+            b.Foreground = selected ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("SidebarTextBrush");
+        }
         if (ReferenceEquals(page, ReportsPage)) RefreshReports();
         if (ReferenceEquals(page, StatusPage)) _ = RefreshServiceStatusesAsync();
         if (ReferenceEquals(page, NewsPage)) _ = RefreshNewsAsync();
@@ -2229,6 +2237,8 @@ public partial class MainWindow : Window
         {
             var isActive = string.Equals(tab.Tag?.ToString(), category, StringComparison.OrdinalIgnoreCase);
             tab.Background = isActive ? (Brush)FindResource("SidebarActiveBrush") : Brushes.Transparent;
+            tab.BorderBrush = isActive ? (Brush)FindResource("AccentBrush") : Brushes.Transparent;
+            tab.Foreground = isActive ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("TextBrush");
         }
     }
 
@@ -2239,8 +2249,9 @@ public partial class MainWindow : Window
         _preferences.MemoryMb = (int)Math.Round(MemorySlider.Value / 512.0, MidpointRounding.AwayFromZero) * 512;
         if (_preferences.MinimumMemoryMb > _preferences.MemoryMb) _preferences.MinimumMemoryMb = 1024;
         MemoryValueLabel.Text = FormatMemory(_preferences.MemoryMb);
+        RefreshJavaRuntimes();
         JavaPathBox.Text = _preferences.JavaPath;
-        JavaPathStatus.Text = string.IsNullOrWhiteSpace(_preferences.JavaPath) ? "Java automático" : $"Java manual: {_preferences.JavaPath}";
+        SelectJavaRuntime(_preferences.JavaPath);
         ExtraJvmArgumentsBox.Text = _preferences.ExtraJvmArguments;
         FullScreenBox.IsChecked = _preferences.FullScreen;
         LauncherPresenceBox.IsChecked = _preferences.LauncherRichPresenceEnabled;
@@ -2354,6 +2365,12 @@ public partial class MainWindow : Window
 
     private void JavaPath_LostFocus(object sender, RoutedEventArgs e) => SaveJavaPath(JavaPathBox.Text.Trim());
 
+    private void JavaRuntime_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingSettings || JavaRuntimeBox.SelectedItem is not JavaRuntimeOption option) return;
+        SaveJavaPath(option.Path);
+    }
+
     private void BrowseJava_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
@@ -2362,10 +2379,19 @@ public partial class MainWindow : Window
             Filter = "Executável Java (javaw.exe;java.exe)|javaw.exe;java.exe|Todos os arquivos (*.*)|*.*",
             CheckFileExists = true
         };
-        if (dialog.ShowDialog(this) == true) SaveJavaPath(dialog.FileName);
+        if (dialog.ShowDialog(this) == true)
+        {
+            AddJavaRuntime(dialog.FileName);
+            SelectJavaRuntime(dialog.FileName);
+            SaveJavaPath(dialog.FileName);
+        }
     }
 
-    private void ResetJava_Click(object sender, RoutedEventArgs e) => SaveJavaPath(string.Empty);
+    private void ResetJava_Click(object sender, RoutedEventArgs e)
+    {
+        SelectJavaRuntime(string.Empty);
+        SaveJavaPath(string.Empty);
+    }
 
     private void SaveJavaPath(string path)
     {
@@ -2374,10 +2400,156 @@ public partial class MainWindow : Window
             JavaPathStatus.Text = "Escolha um java.exe ou javaw.exe existente.";
             return;
         }
+        if (!string.IsNullOrWhiteSpace(path)) AddJavaRuntime(path);
+        SelectJavaRuntime(path);
         _preferences.JavaPath = path;
         JavaPathBox.Text = path;
-        JavaPathStatus.Text = string.IsNullOrWhiteSpace(path) ? "Java automático" : $"Java manual: {path}";
+        UpdateJavaPathStatus();
         LauncherExtrasStore.SavePreferences(_preferences);
+    }
+
+    private void RefreshJavaRuntimes()
+    {
+        var selectedPath = _preferences.JavaPath;
+        JavaRuntimeBox.Items.Clear();
+        JavaRuntimeBox.Items.Add(new JavaRuntimeOption("Automático (recomendado)", "", 0));
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            path = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"'));
+            if (Directory.Exists(path))
+            {
+                Add(Path.Combine(path, "bin", "javaw.exe"));
+                Add(Path.Combine(path, "bin", "java.exe"));
+                return;
+            }
+            if (File.Exists(path) && (Path.GetFileName(path).Equals("java.exe", StringComparison.OrdinalIgnoreCase) || Path.GetFileName(path).Equals("javaw.exe", StringComparison.OrdinalIgnoreCase)))
+                paths.Add(Path.GetFullPath(path));
+        }
+
+        Add(selectedPath);
+        Add(Environment.GetEnvironmentVariable("JAVA_HOME"));
+        foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            Add(Path.Combine(directory.Trim().Trim('"'), "javaw.exe"));
+            Add(Path.Combine(directory.Trim().Trim('"'), "java.exe"));
+        }
+        foreach (var root in new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Java"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Eclipse Adoptium"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Amazon Corretto"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Zulu")
+        })
+        {
+            if (!Directory.Exists(root)) continue;
+            try { foreach (var runtimeDirectory in Directory.GetDirectories(root)) Add(runtimeDirectory); }
+            catch (UnauthorizedAccessException) { }
+            catch (IOException) { }
+        }
+        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+        {
+            try
+            {
+                using var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
+                foreach (var keyPath in new[] { @"SOFTWARE\JavaSoft\Java Runtime Environment", @"SOFTWARE\JavaSoft\JDK", @"SOFTWARE\Eclipse Adoptium" })
+                {
+                    using var rootKey = hive.OpenSubKey(keyPath);
+                    if (rootKey is null) continue;
+                    foreach (var subkeyName in rootKey.GetSubKeyNames())
+                    {
+                        using var subkey = rootKey.OpenSubKey(subkeyName);
+                        Add(subkey?.GetValue("JavaHome") as string);
+                        Add(subkey?.GetValue("Path") as string);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException) { }
+        }
+
+        foreach (var path in paths.OrderBy(path => { var major = ReadJavaMajor(path); return major > 0 ? major : int.MaxValue; }).ThenBy(path => path, StringComparer.OrdinalIgnoreCase))
+            AddJavaRuntime(path);
+        SelectJavaRuntime(selectedPath);
+    }
+
+    private void AddJavaRuntime(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        path = Path.GetFullPath(path);
+        if (Path.GetFileName(path).Equals("java.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            var javaw = Path.Combine(Path.GetDirectoryName(path)!, "javaw.exe");
+            if (File.Exists(javaw)) path = javaw;
+        }
+        if (JavaRuntimeBox.Items.OfType<JavaRuntimeOption>().Any(option => option.Path.Equals(path, StringComparison.OrdinalIgnoreCase))) return;
+        var major = ReadJavaMajor(path);
+        var label = major > 0 ? $"Java {major} · {path}" : $"Java · {path}";
+        JavaRuntimeBox.Items.Add(new JavaRuntimeOption(label, path, major));
+    }
+
+    private void SelectJavaRuntime(string path)
+    {
+        var wasLoading = _loadingSettings;
+        _loadingSettings = true;
+        var selected = JavaRuntimeBox.Items.OfType<JavaRuntimeOption>()
+            .FirstOrDefault(option => option.Path.Equals(path ?? "", StringComparison.OrdinalIgnoreCase));
+        if (selected is null && !string.IsNullOrWhiteSpace(path))
+        {
+            AddJavaRuntime(path);
+            selected = JavaRuntimeBox.Items.OfType<JavaRuntimeOption>()
+                .FirstOrDefault(option => option.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+        }
+        JavaRuntimeBox.SelectedItem = selected ?? JavaRuntimeBox.Items.OfType<JavaRuntimeOption>().FirstOrDefault();
+        _loadingSettings = wasLoading;
+        UpdateJavaPathStatus();
+    }
+
+    private void UpdateJavaPathStatus()
+    {
+        var path = _preferences.JavaPath;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            JavaPathStatus.Text = "Java automático: o launcher selecionará o runtime adequado.";
+            return;
+        }
+        var selected = JavaRuntimeBox.SelectedItem as JavaRuntimeOption;
+        var major = selected is not null && selected.Path.Equals(path, StringComparison.OrdinalIgnoreCase)
+            ? selected.Major : ReadJavaMajor(path);
+        var version = VersionSelector.SelectedItem as string ?? "";
+        var requiredMajor = version.StartsWith("26.", StringComparison.OrdinalIgnoreCase) ? 25 : 21;
+        JavaPathStatus.Text = major > 0 ? $"Java {major} selecionado · {path}" : $"Java selecionado: {path}";
+        if (major > 0 && major < requiredMajor)
+            JavaPathStatus.Text += $" — Minecraft {version} requer Java {requiredMajor} ou superior.";
+    }
+
+    private static int ReadJavaMajor(string path)
+    {
+        try
+        {
+            var executable = Path.GetFileName(path).Equals("javaw.exe", StringComparison.OrdinalIgnoreCase)
+                ? Path.Combine(Path.GetDirectoryName(path)!, "java.exe") : path;
+            if (!File.Exists(executable)) return 0;
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = executable,
+                Arguments = "-version",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
+            });
+            if (process is null || !process.WaitForExit(2500))
+            {
+                try { process?.Kill(true); } catch { }
+                return 0;
+            }
+            var output = process.StandardError.ReadToEnd() + " " + process.StandardOutput.ReadToEnd();
+            var match = Regex.Match(output, "(?:version\\s+\"(?:1\\.)?|openjdk\\s+)(\\d+)", RegexOptions.IgnoreCase);
+            return match.Success && int.TryParse(match.Groups[1].Value, out var major) ? major : 0;
+        }
+        catch { return 0; }
     }
 
     private void ExtraJvmArguments_LostFocus(object sender, RoutedEventArgs e)
@@ -2674,6 +2846,11 @@ public partial class MainWindow : Window
 }
 
 public sealed record ModInstallTarget(string Label, string Version)
+{
+    public override string ToString() => Label;
+}
+
+public sealed record JavaRuntimeOption(string Label, string Path, int Major)
 {
     public override string ToString() => Label;
 }
