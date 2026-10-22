@@ -150,6 +150,22 @@ public partial class MainWindow : Window
         RefreshHomeDashboard();
         Loaded += (_, _) => InitializeExtras();
         _newsTimer.Tick += async (_, _) => await RefreshNewsAsync();
+        StateChanged += (_, _) => UpdateMaximizeRestoreButton();
+    }
+
+    private void MinimizeWindow_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void ToggleMaximizeWindow_Click(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void CloseWindow_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void UpdateMaximizeRestoreButton()
+    {
+        if (MaximizeRestoreGlyph is null || MaximizeRestoreButton is null) return;
+        var maximized = WindowState == WindowState.Maximized;
+        MaximizeRestoreGlyph.Text = maximized ? "\uE923" : "\uE922";
+        MaximizeRestoreButton.ToolTip = maximized ? "Restaurar" : "Maximizar";
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
