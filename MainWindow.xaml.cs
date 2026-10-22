@@ -957,14 +957,31 @@ public partial class MainWindow : Window
             OpenModDetails_Click(new Button { Tag = mod }, new RoutedEventArgs());
     }
 
-    private void ManagedModCard_Click(object sender, MouseButtonEventArgs e)
+    private async void ManagedModCard_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement card || ClickOriginatesInButton(e.OriginalSource as DependencyObject, card)) return;
-        if (card.DataContext is not ManagedMod mod) return;
+        if (card.DataContext is not ManagedMod mod || VersionSelector.SelectedItem is not string gameVersion) return;
+        e.Handled = true;
         if (!mod.IsManaged)
         {
-            LibraryStatusText.Text = "Este arquivo não tem vínculo com um projeto Modrinth, então não há página de versões para abrir.";
-            return;
+            try
+            {
+                var jarPath = Path.Combine(GetCurrentInstancePath(gameVersion), "mods", mod.FileName);
+                LibraryStatusText.Text = $"Localizando {mod.Name} no Modrinth…";
+                mod = await _modrinth.ResolveManagedModFromJarAsync(jarPath, gameVersion, "Fabric") ?? mod;
+                if (!mod.IsManaged)
+                {
+                    LibraryStatusText.Text = "Este arquivo não foi encontrado no Modrinth; não há página de versões para abrir.";
+                    return;
+                }
+                RefreshModrinthInstance();
+            }
+            catch (Exception ex)
+            {
+                LibraryStatusText.Text = "Não foi possível localizar este arquivo no Modrinth.";
+                MessageBox.Show(ex.Message, "Abrir página do mod", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
         }
         _returnToInstancesAfterModDetails = true;
         UpdateSingleManagedMod_Click(new Button { Tag = mod }, new RoutedEventArgs());

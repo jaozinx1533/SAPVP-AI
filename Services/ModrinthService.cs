@@ -168,6 +168,33 @@ public sealed class ModrinthService
         return string.IsNullOrWhiteSpace(fileInfo?.ProjectId) ? null : await GetProjectIconUrlAsync(fileInfo.ProjectId);
     }
 
+    public async Task<ManagedMod?> ResolveManagedModFromJarAsync(string jarPath, string gameVersion, string loader)
+    {
+        await using var file = File.OpenRead(jarPath);
+        var sha1 = Convert.ToHexString(await SHA1.HashDataAsync(file)).ToLowerInvariant();
+        using var response = await Http.GetAsync($"version_file/{sha1}?algorithm=sha1");
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        var info = await response.Content.ReadFromJsonAsync<VersionFileLookupResponse>(Json);
+        if (info is null || string.IsNullOrWhiteSpace(info.ProjectId) || string.IsNullOrWhiteSpace(info.Id)) return null;
+
+        var project = await GetProjectDetailsAsync(info.ProjectId);
+        var normalizedLoader = NormalizeLoader(loader);
+        var resolvedLoader = info.Loaders.Contains(normalizedLoader, StringComparer.OrdinalIgnoreCase)
+            ? normalizedLoader
+            : info.Loaders.FirstOrDefault(item => item is "fabric" or "forge" or "neoforge" or "quilt") ?? normalizedLoader;
+        var resolvedGameVersion = info.GameVersions.FirstOrDefault(item =>
+            string.Equals(item, gameVersion, StringComparison.OrdinalIgnoreCase) && GameVersionCatalog.IsSupported(item)) ?? gameVersion;
+        var managed = new ManagedMod(info.ProjectId, project.Title, info.Id, info.VersionNumber,
+            Path.GetFileName(jarPath), resolvedGameVersion, resolvedLoader, project.IconUrl);
+
+        var directory = Path.GetDirectoryName(jarPath)!;
+        var installed = LoadInstalledMods(directory).Where(item =>
+            !string.Equals(item.FileName, managed.FileName, StringComparison.OrdinalIgnoreCase)).Append(managed).ToArray();
+        SaveInstalledMods(directory, installed);
+        return managed;
+    }
+
     public async Task<IReadOnlyList<ModrinthReleaseOption>> GetSupportedReleasesAsync(string projectId, string loader, IEnumerable<string> allowedGameVersions)
     {
         var allowed = allowedGameVersions.Where(GameVersionCatalog.IsSupported).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -528,7 +555,11 @@ public sealed class ModrinthService
     }
     private sealed class VersionFileLookupResponse
     {
+        [JsonPropertyName("id")] public string Id { get; init; } = "";
         [JsonPropertyName("project_id")] public string ProjectId { get; init; } = "";
+        [JsonPropertyName("version_number")] public string VersionNumber { get; init; } = "";
+        [JsonPropertyName("game_versions")] public List<string> GameVersions { get; init; } = [];
+        [JsonPropertyName("loaders")] public List<string> Loaders { get; init; } = [];
     }
     private sealed class ProjectGalleryResponse
     {
