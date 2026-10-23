@@ -57,6 +57,10 @@ Abra `MinecraftProjectLauncher.csproj` no Visual Studio e execute o projeto. Par
 
 A interface atual usa WPF e a integração com a bandeja usa a API do Windows, portanto esta versão funciona somente no Windows. O suporte a Linux e macOS exige migrar a interface para uma tecnologia multiplataforma e trocar os recursos específicos do Windows (bandeja, Lixeira e instalador). A biblioteca CmlLib usada para autenticação e inicialização do Minecraft declara suporte a Windows, Linux e macOS; isso não torna a interface WPF multiplataforma.
 
+## Distribuição
+
+O repositório GitHub contém o código-fonte aberto. O instalador do Windows distribui somente o executável compilado `SAPVP-AI.exe`, sem arquivos `.cs` ou símbolos `.pdb`. Como o launcher é feito em .NET, o executável ainda pode ser inspecionado ou descompilado; separar o código-fonte não impede engenharia reversa.
+
 ## Licença deste projeto
 
 Este projeto está licenciado sob a licença MIT. Consulte o arquivo `LICENSE`.

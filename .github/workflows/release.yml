@@ -25,7 +25,7 @@ jobs:
         run: |
           if ($env:GITHUB_REF_NAME -notmatch '^v\d+\.\d+\.\d+$') { throw "Use a stable version tag, for example v1.0.1" }
           $version = $env:GITHUB_REF_NAME.TrimStart('v')
-          dotnet publish MinecraftProjectLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:Version=$version -p:AssemblyVersion=$version.0 -p:FileVersion=$version.0 -o "$env:GITHUB_WORKSPACE\publish"
+          dotnet publish MinecraftProjectLauncher.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false -p:Version=$version -p:AssemblyVersion=$version.0 -p:FileVersion=$version.0 -o "$env:GITHUB_WORKSPACE\publish"
           if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
 
       - name: Install Inno Setup

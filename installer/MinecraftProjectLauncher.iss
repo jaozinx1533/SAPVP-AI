@@ -26,7 +26,7 @@ CloseApplications=yes
 RestartApplications=no
 
 [Files]
-Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PublishDir}\SAPVP-AI.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\SAPVP-AI"; Filename: "{app}\SAPVP-AI.exe"
